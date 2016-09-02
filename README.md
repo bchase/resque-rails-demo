@@ -96,7 +96,7 @@ A couple stylistic things to note:
 As for this implementation, a couple things stand out to me:
 
 1. `Exporter` doesn't really *do* much of anything. It's actually quite akin to a controller action: an ID comes in, it fetches the resource from the DB, and then does something with it. This is exactly how we want this to look, and I'll explain why in a minute.
-2. `Exporter` doesn't really know or care about the computation here. It *could* know the details of what it takes to perform an export, but having that live inside of `Export#perform_length_computation!` would make more sense to me here, in an SRP-kind-of-way; `Exporter` exists mostly exists to watch the queue and kick off the export process when it needed.
+2. `Exporter` doesn't really know or care about the computation here. It *could* know the details of what it takes to perform an export, but having that live inside of `Export#perform_lengthy_computation!` would make more sense to me here, in an SRP-kind-of-way; `Exporter` exists mostly exists to watch the queue and kick off the export process when it needed.
 3. The argument coming in to `perform` is an ID, *not* an `Export` instance/record. This is hugely important, because when a job in enqueued in Resque, it's [persisted as JSON](https://github.com/resque/resque#persistence). And since anything we enqueue as an argument will need to be serialized to and deserialized from JSON in the course of processing the job, we'll want to keep these arguments as simple as possible. Passing IDs in the same way that you'd make a request to a controller action (as discussed above) is an excellent way to accomplish this.
 
 So now that we have our job, we'll need to start pushing exports onto its queue from our controller. If you refer back to our flow above, you'll see that we want to do that from `exports#create`, and that will look something like this:
@@ -451,7 +451,7 @@ class Export < ActiveRecord::Base
   end
 
   # the actual work
-  def perform_length_computation!
+  def perform_lengthy_computation!
     # ...
   end
 end
@@ -508,7 +508,7 @@ I've also set up a couple branches in this repo to play with the problems hands-
 $ git clone https://github.com/bchase/resque-rails-demo.git
 $ cd resque-rails-demo
 $ bundle install
-$ rake db:create
+$ rake db:create && rake db:migrate
 ```
 
 ## Running The Problem
@@ -519,7 +519,7 @@ $ git checkout the-problem
 $ rails server
 ```
 
-As mentioned above, [Heroku recommends](https://devcenter.heroku.com/articles/deploying-rails-applications-with-the-puma-web-server#timeout) using `Rack::Timeout` to deal with unreasonably long-running requests, but to simulate the problem, I've made our application intolerant of requests taht take longer than a second to complete:
+As mentioned above, [Heroku recommends](https://devcenter.heroku.com/articles/deploying-rails-applications-with-the-puma-web-server#timeout) using `Rack::Timeout` to deal with unreasonably long-running requests, but to simulate the problem, I've used the same approach to make our application intolerant of requests that take longer than 1 second to complete:
 
 ```ruby
 ### config/initializers/timeout.rb ###
@@ -527,11 +527,22 @@ As mentioned above, [Heroku recommends](https://devcenter.heroku.com/articles/de
 Rack::Timeout.timeout = 1
 ```
 
-tk elsewhere
-I then went into `exports#create` and dropped in a `sleep 2`, which now blows up requests with the following error:
+I then went into `Export` and made `.create` take too long, using an `after_create` hook:
+
+```ruby
+class Export < ApplicationRecord
+  after_create :perform_lengthy_computation!
+
+  def perform_lengthy_computation!
+    sleep 2
+  end
+end
+```
+
+Which leaves us with the following after an attempt at export creation from `/exports/new`:
 
 ```
-Rack::Timeout::RequestTimeoutException in HomeController#index
+Rack::Timeout::RequestTimeoutException in ExportsController#create
 
 Request ran for longer than 1000ms
 ```
