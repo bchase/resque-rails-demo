@@ -11,7 +11,7 @@
   %tbody
     - @exports.each do |export|
       %tr
-        %td= export.complete
+        %td= export.complete? ? 'complete' : 'building'
         %td= link_to 'Show', export
         %td= link_to 'Edit', edit_export_path(export)
         %td= link_to 'Destroy', export, :method => :delete, :data => { :confirm => 'Are you sure?' }
