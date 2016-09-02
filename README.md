@@ -591,3 +591,49 @@ end
 Here `#perform_lengthy_computation!` now mutates the `Export` record, changing the `complete` boolean attribute to `true`, so that we'll be able to see a change on the front-end.
 
 Now try hitting `/exports/new`, create a new export, then keep refreshing the resulting `/exports` page. The `building` value next to the export will turn to `complete` in a matter of a few seconds. (Seems to be taking ~5s on my machine.)
+
+### The Solution, Now with Ajax!
+
+```
+$ git checkout the-solution-with-ajax
+
+$ foreman start
+```
+
+I also went ahead and implemented a simple XHR check for export completion.
+
+Try the `/exports/new` creation process again now, and you'll be able to simply wait to see when the export completes. No manual page refreshing required!
+
+Note: To get this to work quickly, I disabled CSRF protection for the entire app, which is a terrible idea, so please don't base any production code off of this.
+
+This is accomplished by putting a `export` class and `data-id` on the `<tr>` for the export:
+
+```haml
+### app/views/exports/index.html.haml ###
+
+%tbody
+  - @exports.each do |export|
+    %tr.export{data: {id: export.id}}
+      %td= export.complete? ? 'complete' : 'building'
+```
+
+Then checking for `building` exports, long-polling with `jQuery.getJSON`, and reloading the page once the export changes to `{complete: true}`:
+
+```coffee
+### app/assets/javascripts/exports.coffee ###
+
+$ ->
+  $('.export td:first()').each (i, td) ->
+    if $(td).text() == 'building'
+      id   = $(td).closest('tr').data('id')
+      func = ->
+        $.getJSON "/exports/#{id}", (data) ->
+          location.reload() if data.complete
+
+      setInterval func, 1000
+```
+
+
+## Questions? Corrections? Comments?
+
+Feel free to open an issue on the repo, or tweet at me [@forkbobomb](https://twitter.com/forkbobomb)!
