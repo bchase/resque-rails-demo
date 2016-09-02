@@ -10,7 +10,7 @@
 
   %tbody
     - @exports.each do |export|
-      %tr
+      %tr.export{data: {id: export.id}}
         %td= export.complete? ? 'complete' : 'building'
         %td= link_to 'Show', export
         %td= link_to 'Edit', edit_export_path(export)
