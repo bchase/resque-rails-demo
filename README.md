@@ -385,7 +385,7 @@ On Heroku, if we scaled these dynos (processes) up, we may see additional proces
 22:11:51 resque.2 | started with pid 19962
 ```
 
-## Over-review
+## Over(Re)view
 
 I wrote this in hopes that you'd come away better understanding the need for and purpose of Resque in a Rails application, but the path we took above, while hopefully helpful for understanding, was not the most useful for making these changes step-by-step yourself. So let's quickly go over the basic pieces, in a more coherent-to-implement order.
 
@@ -416,27 +416,27 @@ Rails.application.load_tasks
 ```
 # ensure `redis-server` is running
 $ ps -e | grep redis-server
+ 1950 ?        00:01:05 redis-server
 
 # install directions above if needed
 ```
 
 
-### Resque Job
+### App Logic
 
 ```ruby
-### app/jobs/exporter.rb ###
+### app/controllers/exports_controller.rb ###
 
-module Exporter
-  @@queue = :exports
+class ExportsController < ApplicationController
+  def create
+    # kick off async processing
+    Export.create(export_params).async_populate!
 
-  def self.perform(export_id)
-    export = Export.find account_id     # fetch the empty export from the DB
-    export.perform_lengthy_computation! # perform the lengthy export
+    redirect_to 'exports#index',
+      notice: 'Your export is being created, please wait.'
   end
 end
 ```
-
-### App Logic
 
 ```ruby
 ### app/models/export.rb ###
@@ -457,16 +457,18 @@ class Export < ActiveRecord::Base
 end
 ```
 
+
+### Resque Job
+
 ```ruby
-### app/controllers/exports_controller.rb ###
+### app/jobs/exporter.rb ###
 
-class ExportsController < ApplicationController
-  def create
-    # kick off async processing
-    Export.create(export_params).async_populate!
+module Exporter
+  @@queue = :exports
 
-    redirect_to 'exports#index',
-      notice: 'Your export is being created, please wait.'
+  def self.perform(export_id)
+    export = Export.find account_id     # fetch the empty export from the DB
+    export.perform_lengthy_computation! # perform the lengthy export
   end
 end
 ```
@@ -497,7 +499,7 @@ $ foreman start
 
 And that about covers it!
 
-I've also set up a couple branches in this repo to play with the problems hands-on.
+I've also set up a couple branches in this repo to play with the problems hands-on, so keep reading for details on that!
 
 
 ## Getting Set Up
@@ -510,23 +512,28 @@ $ rake db:create
 ```
 
 ## Running The Problem
+
+```
+$ git checkout the-problem
+
+$ rails server
+```
+
+As mentioned above, [Heroku recommends](https://devcenter.heroku.com/articles/deploying-rails-applications-with-the-puma-web-server#timeout) using `Rack::Timeout` to deal with unreasonably long-running requests, but to simulate the problem, I've made our application intolerant of requests taht take longer than a second to complete:
+
+```ruby
+### config/initializers/timeout.rb ###
+
+Rack::Timeout.timeout = 1
+```
+
+tk elsewhere
+I then went into `exports#create` and dropped in a `sleep 2`, which now blows up requests with the following error:
+
+```
+Rack::Timeout::RequestTimeoutException in HomeController#index
+
+Request ran for longer than 1000ms
+```
+
 ## Running The Solution
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-tk - i use this to simulate https://github.com/heroku/rack-timeout
