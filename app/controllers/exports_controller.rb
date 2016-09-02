@@ -24,7 +24,7 @@ class ExportsController < ApplicationController
   # POST /exports
   # POST /exports.json
   def create
-    @export = Export.new(export_params)
+    @export = Export.new
 
     respond_to do |format|
       if @export.save
@@ -71,6 +71,6 @@ class ExportsController < ApplicationController
 
     # Never trust parameters from the scary internet, only allow the white list through.
     def export_params
-      {} # params.require(:export).permit(:complete)
+      params.require(:export).permit(:complete)
     end
 end
