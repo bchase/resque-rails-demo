@@ -1,0 +1,9 @@
+%p#notice= notice
+
+%p
+  %b Complete:
+  = @export.complete
+
+= link_to 'Edit', edit_export_path(@export)
+\|
+= link_to 'Back', exports_path

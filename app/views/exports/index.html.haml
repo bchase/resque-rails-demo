@@ -1,0 +1,21 @@
+%h1 Listing exports
+
+%table
+  %thead
+    %tr
+      %th Complete
+      %th
+      %th
+      %th
+
+  %tbody
+    - @exports.each do |export|
+      %tr
+        %td= export.complete
+        %td= link_to 'Show', export
+        %td= link_to 'Edit', edit_export_path(export)
+        %td= link_to 'Destroy', export, :method => :delete, :data => { :confirm => 'Are you sure?' }
+
+%br
+
+= link_to 'New Export', new_export_path
