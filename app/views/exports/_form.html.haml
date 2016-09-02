@@ -6,8 +6,9 @@
         - @export.errors.full_messages.each do |msg|
           %li= msg
 
-  .field
+  -# .field
     = f.label :complete
     = f.check_box :complete
+
   .actions
     = f.submit 'Save'
