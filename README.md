@@ -70,7 +70,7 @@ So assuming that we have Redis and Resque all wired up in our app, the next thin
 The great thing about Resque jobs is that they're just Plain Old Ruby Objects, no magic, not even anything to inherit from or `include`. A Resque job is simply a Ruby module or class that:
 
 1. responds to `perform`
-2. defines the queue it watches with a module/class attribute `@@queue = :queue_name`
+2. defines the queue it watches with a module/class attribute `@queue = :queue_name`
 
 So here's what an implementation of a Resque job for our export problem might look like:
 
@@ -78,10 +78,10 @@ So here's what an implementation of a Resque job for our export problem might lo
 ### app/jobs/exporter.rb ###
 
 module Exporter
-  @@queue = :exports
+  @queue = :exports
 
   def self.perform(export_id)
-    export = Export.find account_id     # fetch the empty export from the DB
+    export = Export.find export_id      # fetch the empty export from the DB
     export.perform_lengthy_computation! # perform the lengthy export
   end
 end
@@ -90,7 +90,6 @@ end
 A couple stylistic things to note:
 
 * `Exporter` could just as easily be a class here, but I don't like to make something a class if it's not getting instantiated. And since this object (`Exporter`) need only respond to `perform`, it deserves to be a module in my book.
-* In the Resque docs, they write the `@@queue` above as `@queue`. Since it's written where it is inside the module definition, this is syntactically equivalent, but since I typically prefer to make things as explicit and unambiguous as possible, I went the extra mile and typed the extra keystroke.
 * I chose `app/jobs/exporter.rb`, but you could put this anywhere you like.
 
 As for this implementation, a couple things stand out to me:
@@ -158,7 +157,7 @@ $ QUEUE=* rake resque:work
 $ QUEUE=exports rake resque:work
 ```
 
-The first of these calls will start a Resque worker that will processes jobs on *all* queues, whereas the second will start a worker that only processes the `exports` queue, which corresponds to our `@@queue = :exports` above in our `Exporter` job.
+The first of these calls will start a Resque worker that will processes jobs on *all* queues, whereas the second will start a worker that only processes the `exports` queue, which corresponds to our `@queue = :exports` above in our `Exporter` job.
 
 Besides that, the `resque:work` Rake task comes with Resque, so we won't need to define that. But we have one problem yet: this Rake task knows nothing about our Rails app, which means that it won't know anything about `Export` or `Exporter`.
 
@@ -198,7 +197,7 @@ And here's closer to what I'd probably do:
 
 ```ruby
 ### app/models/export.rb ###
-class Export < ActiveRecord::Base
+class Export < ApplicationRecord
   # ...
 
   def async_populate!
@@ -441,7 +440,7 @@ end
 ```ruby
 ### app/models/export.rb ###
 
-class Export < ActiveRecord::Base
+class Export < ApplicationRecord
   # ...
 
   # do the work later
@@ -464,10 +463,10 @@ end
 ### app/jobs/exporter.rb ###
 
 module Exporter
-  @@queue = :exports
+  @queue = :exports
 
   def self.perform(export_id)
-    export = Export.find account_id     # fetch the empty export from the DB
+    export = Export.find export_id      # fetch the empty export from the DB
     export.perform_lengthy_computation! # perform the lengthy export
   end
 end
@@ -548,3 +547,47 @@ Request ran for longer than 1000ms
 ```
 
 ## Running The Solution
+
+```
+$ git checkout the-solution
+
+$ foreman start
+```
+
+I ended up using a slightly different implementation in the demo app to more closely follow the scaffolded Rails controller logic, but the basic idea is the same:
+
+```ruby
+def create # exports#create
+  @export = Export.new
+
+  respond_to do |format|
+    if @export.save
+      @export.async_populate!
+
+      format.html { redirect_to exports_path, notice: 'Your export is being created, please wait.' }
+    # ...
+    end
+  end
+end
+```
+
+The `Exporter` job module is identical to what we saw above, and our `Export` model now looks like this:
+
+```ruby
+class Export < ApplicationRecord
+  def async_populate!
+    Resque.enqueue Exporter, id
+  end
+
+  def perform_lengthy_computation!
+    sleep 2
+
+    self.complete = true
+    self.save
+  end
+end
+```
+
+Here `#perform_lengthy_computation!` now mutates the `Export` record, changing the `complete` boolean attribute to `true`, so that we'll be able to see a change on the front-end.
+
+Now try hitting `/exports/new`, create a new export, then keep refreshing the resulting `/exports` page. The `building` value next to the export will turn to `complete` in a matter of a few seconds. (Seems to be taking ~5s on my machine.)
