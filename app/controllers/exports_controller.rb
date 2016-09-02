@@ -28,7 +28,9 @@ class ExportsController < ApplicationController
 
     respond_to do |format|
       if @export.save
-        format.html { redirect_to @export, notice: 'Export was successfully created.' }
+        @export.async_populate!
+
+        format.html { redirect_to exports_path, notice: 'Your export is being created, please wait.' }
         format.json { render :show, status: :created, location: @export }
       else
         format.html { render :new }
@@ -69,6 +71,6 @@ class ExportsController < ApplicationController
 
     # Never trust parameters from the scary internet, only allow the white list through.
     def export_params
-      params.require(:export).permit(:complete)
+      {} # params.require(:export).permit(:complete)
     end
 end
